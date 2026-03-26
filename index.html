@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interactive Device Mockup Viewer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #f4f6f9;
+      --control-bg: #ffffff;
+      --text-color: #333;
+      --border-color: #e0e0e0;
+      --primary-color: #4a90e2;
+      --primary-hover: #357abd;
+      --device-bg: #111;
+      --device-border: #444;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Open Sans', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: var(--bg-color);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+      color: var(--text-color);
+    }
+
+    /* Controls Sidebar */
+    .controls-panel {
+      width: 320px;
+      background-color: var(--control-bg);
+      padding: 24px;
+      box-shadow: 2px 0 15px rgba(0, 0, 0, 0.05);
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      overflow-y: auto;
+    }
+
+    .controls-panel h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-color);
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .control-group label {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #666;
+    }
+
+    .control-group input[type="text"],
+    .control-group input[type="number"] {
+      padding: 10px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .control-group input[type="text"]:focus,
+    .control-group input[type="number"]:focus {
+      outline: none;
+      border-color: var(--primary-color);
+    }
+
+    .control-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    /* View Switcher Buttons */
+    .button-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    button {
+      background-color: var(--control-bg);
+      border: 1px solid var(--border-color);
+      color: var(--text-color);
+      padding: 10px 15px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    button:hover {
+      background-color: #f8f9fa;
+    }
+
+    button.active {
+      background-color: var(--primary-color);
+      color: white;
+      border-color: var(--primary-color);
+    }
+
+    /* 3D Scene container */
+    .scene {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      perspective: 1500px;
+      overflow: hidden;
+      padding: 40px;
+    }
+
+    /* Checkbox toggle */
+    .toggle-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .toggle-group input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+
+    /* Device Mockup */
+    .device-container {
+      position: relative;
+      /* Default dimensions for mobile */
+      width: var(--device-width, 375px);
+      height: var(--device-height, 812px);
+      /* Smooth transitions for all transforms and shadows */
+      transition: transform 1s cubic-bezier(0.2, 0.8, 0.2, 1), 
+                  width 0.3s ease, 
+                  height 0.3s ease;
+      transform-style: preserve-3d;
+      /* Makes responsive scaling easier */
+      transform-origin: center center;
+    }
+    
+    /* Inner device styling */
+    .device {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: var(--device-bg);
+      border-radius: 40px;
+      padding: 12px;
+      box-shadow: 
+        inset 0 0 2px 2px rgba(255,255,255,0.1),
+        0 0 0 2px var(--device-border);
+      border: 1px solid #000;
+      box-sizing: border-box;
+      /* Dynamic shadow based on perspective */
+      transition: box-shadow 1s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    /* Front view shadow */
+    .device-container.view-front .device {
+      box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+    }
+
+    /* Side view shadow */
+    .device-container.view-side .device {
+      box-shadow: -30px 20px 50px rgba(0,0,0,0.25);
+    }
+
+    /* Laying view shadow */
+    .device-container.view-laying .device {
+      box-shadow: -20px 50px 60px rgba(0,0,0,0.4);
+    }
+
+    /* Front View Coordinates */
+    .device-container.view-front {
+      transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg) scale(var(--scale, 1));
+    }
+
+    /* Side View Coordinates */
+    .device-container.view-side {
+      transform: rotateY(-35deg) scale(var(--scale, 0.85));
+    }
+
+    /* Laying View Coordinates */
+    .device-container.view-laying {
+      transform: rotateX(60deg) rotateZ(-35deg) scale(var(--scale, 0.8));
+    }
+
+    /* Device Notch (Dynamic Island style) */
+    .device::before {
+      content: '';
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 120px;
+      height: 30px;
+      background-color: var(--device-bg);
+      border-radius: 15px;
+      z-index: 2;
+    }
+
+    /* Iframe Wrapper to handle border-radius correctly */
+    .iframe-wrapper {
+      width: 100%;
+      height: 100%;
+      background: #ffffff;
+      border-radius: 30px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Actual Iframe */
+    .iframe-wrapper iframe {
+      width: 100%;
+      flex-grow: 1;
+      border: none;
+      display: block;
+    }
+
+    /* Status Bar */
+    .status-bar {
+      width: 100%;
+      height: 46px; /* Matches notch area roughly */
+      flex-shrink: 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 26px 0 26px; /* Matches notch alignment */
+      color: #000;
+      font-weight: 600;
+      font-size: 14px;
+      z-index: 10;
+      background: #ffffff; /* Solid white background */
+      box-sizing: border-box;
+    }
+    
+    .status-bar .icons {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    /* Small notification text for cross-origin issues */
+    .note {
+      font-size: 11px;
+      color: #888;
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+    
+    /* For smaller screens, scale down the whole frame */
+    @media (max-width: 900px) {
+      body {
+        flex-direction: column;
+      }
+      .controls-panel {
+        width: 100%;
+        height: auto;
+        box-sizing: border-box;
+      }
+      .scene {
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Controls Panel -->
+  <div class="controls-panel">
+    <h1>Mockup Properties</h1>
+    
+    <div class="control-group">
+      <label for="urlInput">Website URL</label>
+      <input type="text" id="urlInput" value="https://info.cern.ch/hypertext/WWW/TheProject.html" placeholder="https://...">
+      <div class="note">Note: Some sites block iframe embedding (X-Frame-Options). Use sites that allow it (like example.com or wikipedia.org).</div>
+    </div>
+
+    <div class="control-row">
+      <div class="control-group" style="flex: 1;">
+        <label for="widthInput">Width (px)</label>
+        <input type="number" id="widthInput" value="375" min="200" max="1000">
+      </div>
+      <div class="control-group" style="flex: 1;">
+        <label for="heightInput">Height (px)</label>
+        <input type="number" id="heightInput" value="812" min="300" max="2000">
+      </div>
+    </div>
+
+    <label class="toggle-group">
+      <input type="checkbox" id="perspectiveToggle" checked>
+      <span style="font-size: 14px; font-weight: 600; color: #555;">Enable 3D Perspective</span>
+    </label>
+
+    <div class="control-group">
+      <label>Perspective Views</label>
+      <div class="button-group">
+        <button class="view-btn active" data-view="view-front">Front View</button>
+        <button class="view-btn" data-view="view-side">Side View</button>
+        <button class="view-btn" data-view="view-laying">Laying View</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3D Scene and Device -->
+  <div class="scene" id="scene">
+    <div class="device-container view-front" id="deviceContainer">
+      <div class="device">
+        <div class="iframe-wrapper">
+          <div class="status-bar">
+            <span class="time" id="statusTime">9:41</span>
+            <span class="icons">
+              <!-- Cellular Icon -->
+              <svg width="14" height="12" viewBox="0 0 16 14" fill="currentColor"><path d="M1 14h2V8H1v6zm4 0h2V6H5v8zm4 0h2V3H9v11zm4 0h2V0h-2v14z"/></svg>
+              <!-- WiFi Icon -->
+              <svg width="16" height="12" viewBox="0 0 20 16" fill="currentColor"><path d="M10 13c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zm0-4c2.8 0 5.3 1.1 7.1 2.9l1.4-1.4C16.3 8.3 13.3 7 10 7s-6.3 1.3-8.5 3.5l1.4 1.4C4.7 10.1 7.2 9 10 9zm0-5c4.1 0 7.9 1.7 10.6 4.4l1.4-1.4C18.9 3.9 14.6 2 10 2S1.1 3.9-2 7l1.4 1.4C2.1 5.7 5.9 4 10 4z"/></svg>
+              <!-- Battery Icon -->
+              <svg width="22" height="12" viewBox="0 0 24 12" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="1" width="20" height="10" rx="3" fill="currentColor"/><path d="M23 4v4"/></svg>
+            </span>
+          </div>
+          <iframe id="mockupFrame" src="https://info.cern.ch/hypertext/WWW/TheProject.html"></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Elements
+      const urlInput = document.getElementById('urlInput');
+      const widthInput = document.getElementById('widthInput');
+      const heightInput = document.getElementById('heightInput');
+      const perspectiveToggle = document.getElementById('perspectiveToggle');
+      const viewBtns = document.querySelectorAll('.view-btn');
+      
+      const deviceContainer = document.getElementById('deviceContainer');
+      const mockupFrame = document.getElementById('mockupFrame');
+      const scene = document.getElementById('scene');
+
+      // 1. URL Update Handler
+      // Includes basic debounce to avoid spamming reloads
+      let urlTimeout;
+      urlInput.addEventListener('input', (e) => {
+        clearTimeout(urlTimeout);
+        urlTimeout = setTimeout(() => {
+          let url = e.target.value.trim();
+          if (url && !url.startsWith('http://') && !url.startsWith('https://')) {
+            url = 'https://' + url; // Basic protocol fallback
+          }
+          mockupFrame.src = url;
+        }, 500);
+      });
+
+      // 2. Resize Handlers
+      const updateDimensions = () => {
+        const w = parseInt(widthInput.value) || 375;
+        const h = parseInt(heightInput.value) || 812;
+        deviceContainer.style.setProperty('--device-width', w + 'px');
+        deviceContainer.style.setProperty('--device-height', h + 'px');
+        calculateScale();
+      };
+
+      widthInput.addEventListener('input', updateDimensions);
+      heightInput.addEventListener('input', updateDimensions);
+
+      // 3. Perspective Toggle Handler
+      perspectiveToggle.addEventListener('change', (e) => {
+        if (e.target.checked) {
+          scene.style.perspective = '1500px';
+          deviceContainer.style.transformStyle = 'preserve-3d';
+        } else {
+          scene.style.perspective = 'none';
+          // When turning off perspective, force front view appearance
+          deviceContainer.style.transformStyle = 'flat';
+        }
+      });
+
+      // 4. View Switcher Handler
+      viewBtns.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          // Remove active class from all
+          viewBtns.forEach(b => b.classList.remove('active'));
+          // Add to clicked
+          e.target.classList.add('active');
+
+          const viewClass = e.target.getAttribute('data-view');
+          
+          // Remove existing view classes
+          deviceContainer.classList.remove('view-front', 'view-side', 'view-laying');
+          // Add new view class
+          deviceContainer.classList.add(viewClass);
+        });
+      });
+
+      // 5. Responsiveness / Scaling
+      // We scale the device container down via CSS transform if it exceeds the window height
+      function calculateScale() {
+        const sceneRect = scene.getBoundingClientRect();
+        const w = parseInt(widthInput.value) || 375;
+        const h = parseInt(heightInput.value) || 812;
+        
+        // Add some padding margin
+        const availableHeight = sceneRect.height - 80;
+        const availableWidth = sceneRect.width - 80;
+        
+        // Calculate required scale to fit
+        const scaleY = availableHeight / h;
+        const scaleX = availableWidth / w;
+        
+        let scale = Math.min(scaleY, scaleX, 1); // Don't scale up past 1x
+        
+        // Apply CSS variable for the container
+        deviceContainer.style.setProperty('--scale', scale);
+      }
+
+      window.addEventListener('resize', calculateScale);
+      
+      // 6. Dynamic Status Bar Clock Handler
+      function updatePhoneTime() {
+        const timeEl = document.getElementById('statusTime');
+        const now = new Date();
+        const hours = now.getHours();
+        const mins = String(now.getMinutes()).padStart(2, '0');
+        // Let's use 12-hour format or 24-hour style. 
+        // Example uses 24-hour by default or simple format.
+        timeEl.textContent = `${hours}:${mins}`;
+      }
+      setInterval(updatePhoneTime, 1000);
+      updatePhoneTime();
+      
+      // Initial scale setup
+      calculateScale();
+    });
+  </script>
+</body>
+</html>
